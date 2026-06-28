@@ -21,6 +21,7 @@ const localeMeta = {
 
 const landingLocales = UI_LOCALES.map((locale) => locale.code);
 const template = await readFile(templatePath, "utf8");
+const assetTags = extractAssetTags(template);
 
 for (const locale of landingLocales) {
   const meta = localeMeta[locale] || localeMeta.en;
@@ -94,12 +95,20 @@ function renderDocument({ body, description, htmlLang, noIndex = false, pathName
     `<meta name="twitter:title" content="${escapeHtml(title)}">`,
     `<meta name="twitter:description" content="${escapeHtml(description)}">`,
     `<script type="application/ld+json">${JSON.stringify(renderJsonLd({ description, title, url: canonicalUrl }))}</script>`,
+    assetTags,
   ].join("\n    ");
 
   return template
     .replace(/<html[^>]*>/u, `<html lang="${htmlLang}">`)
     .replace(/<head>[\s\S]*?<\/head>/u, `<head>\n    ${head}\n  </head>`)
     .replace(`<div id="root"></div>`, `<div id="root">${body}</div>`);
+}
+
+function extractAssetTags(html) {
+  const head = html.match(/<head>([\s\S]*?)<\/head>/u)?.[1] || "";
+  return [...head.matchAll(/<(?:script|link)\b[^>]*(?:\/assets\/)[^>]*(?:><\/script>|>)/gu)]
+    .map((match) => match[0].trim())
+    .join("\n    ");
 }
 
 function renderLanding(t) {
