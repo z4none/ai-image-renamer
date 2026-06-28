@@ -647,7 +647,10 @@ button {
 }
 
 .siteFooter a {
+  align-items: center;
   color: var(--muted);
+  display: inline-flex;
+  gap: 6px;
   font-weight: 700;
   text-decoration: none;
 }

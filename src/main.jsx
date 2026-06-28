@@ -7,6 +7,7 @@ import {
   CircleAlert,
   CheckCircle2,
   Folder,
+  Github,
   Globe2,
   Images,
   Languages,
@@ -28,6 +29,7 @@ import { IconButton, ImageTable, ProgressBar, SelectControl, Stat } from "./comp
 const PROMPT_TIMEOUT_MS = 60_000;
 const MAX_PROMPTS_PER_SESSION = 24;
 const CHROME_DOWNLOAD_URL = "https://www.google.com/chrome/";
+const GITHUB_URL = "https://github.com/z4none/ai-image-renamer";
 
 const log = (...args) => console.log("[ai-image-renamer]", ...args);
 const logError = (...args) => console.error("[ai-image-renamer]", ...args);
@@ -919,6 +921,10 @@ function LandingPage({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
           <p>{t.footerDescription}</p>
         </div>
         <nav aria-label={t.footerLinksLabel}>
+          <a className="githubLink" href={GITHUB_URL} target="_blank" rel="noreferrer">
+            <Github size={16} />
+            <span>GitHub</span>
+          </a>
           <a href={legalPathFor(uiLocale, "terms")}>{t.terms}</a>
           <a href={legalPathFor(uiLocale, "privacy")}>{t.privacy}</a>
         </nav>
