@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  ArrowLeft,
   ArrowRight,
   Bot,
   CircleAlert,
@@ -77,7 +78,7 @@ function Root() {
   }
 
   if (path === "/app") {
-    return <RenamerApp setTheme={setTheme} setUiLocale={setUiLocale} theme={theme} uiLocale={uiLocale} />;
+    return <RenamerApp navigate={navigate} setTheme={setTheme} setUiLocale={setUiLocale} theme={theme} uiLocale={uiLocale} />;
   }
 
   if (isLegalPath(path)) {
@@ -104,7 +105,7 @@ function Root() {
   );
 }
 
-function RenamerApp({ setTheme, setUiLocale, theme, uiLocale }) {
+function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
   const [language, setLanguage] = useState("en");
   const [filenameFormat, setFilenameFormat] = useState("hyphen");
   const [nameLength, setNameLength] = useState("short");
@@ -139,6 +140,7 @@ function RenamerApp({ setTheme, setUiLocale, theme, uiLocale }) {
     [language],
   );
   const t = useMemo(() => UI_TEXT[uiLocale] || UI_TEXT.en, [uiLocale]);
+  const landingPath = uiLocale === "en" ? "/" : `/${uiLocale}`;
   const readyCount = rows.filter(isReady).length;
   const failedCount = rows.filter((row) => String(row.state).startsWith("Failed")).length;
 
@@ -481,6 +483,7 @@ function RenamerApp({ setTheme, setUiLocale, theme, uiLocale }) {
         showMatrix={false}
         support={support}
         t={t}
+        onHome={() => navigate(landingPath)}
       />
     );
   }
@@ -500,6 +503,7 @@ function RenamerApp({ setTheme, setUiLocale, theme, uiLocale }) {
         setTheme={setTheme}
         support={support}
         t={t}
+        onHome={() => navigate(landingPath)}
       />
     );
   }
@@ -517,6 +521,12 @@ function RenamerApp({ setTheme, setUiLocale, theme, uiLocale }) {
           </div>
         </div>
         <div className="heroActions">
+          <IconButton
+            variant="ghost"
+            icon={<ArrowLeft size={18} />}
+            label="Home"
+            onClick={() => navigate(landingPath)}
+          />
           <SelectControl
             className="uiLocaleSelect"
             icon={<Globe2 size={16} />}
@@ -1012,7 +1022,7 @@ function SiteNav({ homePath, navigate, onLocaleChange, setTheme, t, theme, uiLoc
   );
 }
 
-function UnsupportedScreen({ icon, message, missing = [], setTheme, showMatrix = true, support, t, theme, title }) {
+function UnsupportedScreen({ icon, message, missing = [], onHome, setTheme, showMatrix = true, support, t, theme, title }) {
   const chromeVersionText = support.chromeVersion ? `${support.browserName} ${support.chromeVersion}` : t.browserUnknown;
   const featureChecks = [
     {
@@ -1055,12 +1065,22 @@ function UnsupportedScreen({ icon, message, missing = [], setTheme, showMatrix =
               <p>{message}</p>
             </div>
           </div>
-          <IconButton
-            variant="ghost"
-            icon={theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
-            label={theme === "dark" ? "Light" : "Dark"}
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          />
+          <div className="unsupportedActions">
+            {onHome ? (
+              <IconButton
+                variant="ghost"
+                icon={<ArrowLeft size={18} />}
+                label="Home"
+                onClick={onHome}
+              />
+            ) : null}
+            <IconButton
+              variant="ghost"
+              icon={theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+              label={theme === "dark" ? "Light" : "Dark"}
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            />
+          </div>
         </div>
 
         {missing.length ? (
