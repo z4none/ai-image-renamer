@@ -21,7 +21,8 @@ const localeMeta = {
 
 const landingLocales = UI_LOCALES.map((locale) => locale.code);
 const template = await readFile(templatePath, "utf8");
-const preservedHeadTags = extractPreservedHeadTags(template);
+const assetHeadTags = extractPreservedHeadTags(template, { pwa: false });
+const appHeadTags = extractPreservedHeadTags(template, { pwa: true });
 
 for (const locale of landingLocales) {
   const meta = localeMeta[locale] || localeMeta.en;
@@ -73,6 +74,7 @@ await writeFile(
 function renderDocument({ body, description, htmlLang, noIndex = false, pathName, title }) {
   const canonicalUrl = `${siteUrl}${pathName}`;
   const legalType = pathName.endsWith("/terms/") ? "terms" : pathName.endsWith("/privacy/") ? "privacy" : "";
+  const preservedHeadTags = pathName === "/app/" ? appHeadTags : assetHeadTags;
   const head = [
     `<meta charset="utf-8">`,
     `<meta name="viewport" content="width=device-width, initial-scale=1">`,
@@ -104,11 +106,12 @@ function renderDocument({ body, description, htmlLang, noIndex = false, pathName
     .replace(`<div id="root"></div>`, `<div id="root">${body}</div>`);
 }
 
-function extractPreservedHeadTags(html) {
+function extractPreservedHeadTags(html, { pwa }) {
   const head = html.match(/<head>([\s\S]*?)<\/head>/u)?.[1] || "";
-  const preservedTagPattern =
-    /<(?:script|link|meta)\b(?=[^>]*(?:\/assets\/|manifest\.webmanifest|registerSW\.js|rel="(?:icon|apple-touch-icon)"|name="theme-color"))[^>]*(?:><\/script>|>)/gu;
-  return [...head.matchAll(preservedTagPattern)]
+  const tagPattern = pwa
+    ? /<(?:script|link|meta)\b(?=[^>]*(?:\/assets\/|manifest\.webmanifest|registerSW\.js|rel="(?:icon|apple-touch-icon)"|name="theme-color"))[^>]*(?:><\/script>|>)/gu
+    : /<(?:script|link)\b(?=[^>]*\/assets\/)[^>]*(?:><\/script>|>)/gu;
+  return [...head.matchAll(tagPattern)]
     .map((match) => match[0].trim())
     .join("\n    ");
 }

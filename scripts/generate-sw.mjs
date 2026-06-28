@@ -2,11 +2,19 @@ import { generateSW } from "workbox-build";
 
 const { count, size, warnings } = await generateSW({
   globDirectory: "dist",
-  globPatterns: ["**/*.{js,css,html,png,svg,ico,webmanifest}"],
+  globPatterns: [
+    "app/index.html",
+    "assets/*.{js,css}",
+    "logo-*.png",
+    "screenshot-*.png",
+    "manifest.webmanifest",
+    "registerSW.js",
+  ],
   globIgnores: ["sw.js", "workbox-*.js", "logo.fw.png"],
   swDest: "dist/sw.js",
   cleanupOutdatedCaches: true,
-  navigateFallback: "/index.html",
+  navigateFallback: "/app/index.html",
+  navigateFallbackAllowlist: [/^\/app(?:\/.*)?$/],
 });
 
 for (const warning of warnings) {

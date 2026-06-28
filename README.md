@@ -107,7 +107,7 @@ The build runs Vite, `scripts/prerender.mjs`, and `scripts/generate-sw.mjs`. The
 - matching `/terms/` and `/privacy/` pages
 - `/app/` for the interactive app
 
-The final service worker is generated after prerendering so the PWA precache includes the app route, localized landing pages, legal pages, screenshots, icons, and hashed Vite assets.
+The final service worker is generated after prerendering. PWA registration, scope, navigation fallback, and precaching are limited to `/app/` and the assets required by the app. Landing and legal pages remain ordinary static pages.
 
 Set the public site URL before building so canonical and Open Graph URLs use the deployment domain:
 

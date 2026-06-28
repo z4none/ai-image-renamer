@@ -8,6 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "script",
+      scope: "/app/",
       includeAssets: ["logo-192.png", "logo-512.png", "logo-1024.png", "screenshot-light.png", "screenshot-dark.png"],
       manifest: {
         name: "AI Image Renamer",
@@ -15,7 +16,7 @@ export default defineConfig({
         description: "Rename local image folders with Chrome built-in AI.",
         id: "/app/",
         start_url: "/app/",
-        scope: "/",
+        scope: "/app/",
         display: "standalone",
         orientation: "any",
         background_color: "#eef3f8",
@@ -64,7 +65,8 @@ export default defineConfig({
       workbox: {
         globPatterns: ["**/*.{js,css,html,png,svg,ico,webmanifest}"],
         globIgnores: ["logo.fw.png"],
-        navigateFallback: "/index.html",
+        navigateFallback: "/app/index.html",
+        navigateFallbackAllowlist: [/^\/app(?:\/.*)?$/],
       },
       devOptions: {
         enabled: true,
