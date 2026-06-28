@@ -6,6 +6,7 @@ yarn.lock
 
 # Build output
 dist/
+dev-dist/
 
 # Local logs
 *.log
