@@ -21,7 +21,7 @@ const localeMeta = {
 
 const landingLocales = UI_LOCALES.map((locale) => locale.code);
 const template = await readFile(templatePath, "utf8");
-const assetTags = extractAssetTags(template);
+const preservedHeadTags = extractPreservedHeadTags(template);
 
 for (const locale of landingLocales) {
   const meta = localeMeta[locale] || localeMeta.en;
@@ -95,7 +95,7 @@ function renderDocument({ body, description, htmlLang, noIndex = false, pathName
     `<meta name="twitter:title" content="${escapeHtml(title)}">`,
     `<meta name="twitter:description" content="${escapeHtml(description)}">`,
     `<script type="application/ld+json">${JSON.stringify(renderJsonLd({ description, title, url: canonicalUrl }))}</script>`,
-    assetTags,
+    preservedHeadTags,
   ].join("\n    ");
 
   return template
@@ -104,9 +104,11 @@ function renderDocument({ body, description, htmlLang, noIndex = false, pathName
     .replace(`<div id="root"></div>`, `<div id="root">${body}</div>`);
 }
 
-function extractAssetTags(html) {
+function extractPreservedHeadTags(html) {
   const head = html.match(/<head>([\s\S]*?)<\/head>/u)?.[1] || "";
-  return [...head.matchAll(/<(?:script|link)\b[^>]*(?:\/assets\/)[^>]*(?:><\/script>|>)/gu)]
+  const preservedTagPattern =
+    /<(?:script|link|meta)\b(?=[^>]*(?:\/assets\/|manifest\.webmanifest|registerSW\.js|rel="(?:icon|apple-touch-icon)"|name="theme-color"))[^>]*(?:><\/script>|>)/gu;
+  return [...head.matchAll(preservedTagPattern)]
     .map((match) => match[0].trim())
     .join("\n    ");
 }
@@ -318,7 +320,7 @@ function renderSiteNav({ homePath, t }) {
     <header class="landingNav">
       <div class="landingNavInner">
         <a class="landingBrand" href="${homePath}">
-          <span class="brandMark" aria-hidden="true">AI</span>
+          <span class="brandMark logoMarkWrap" aria-hidden="true"><img class="brandLogo" src="/logo-192.png" alt="" draggable="false"></span>
           <span>AI Image Renamer</span>
         </a>
         <div class="landingActions">

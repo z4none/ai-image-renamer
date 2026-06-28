@@ -45,6 +45,10 @@ const STATUS_TEXT_KEYS = [
   "reinitializingModel",
 ];
 
+function LogoMark() {
+  return <img className="brandLogo" src="/logo-192.png" alt="" draggable="false" />;
+}
+
 function Root() {
   const [theme, setTheme] = useState(() => {
     const stored = localStorage.getItem("ai-image-renamer-theme");
@@ -512,8 +516,8 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
     <main className="appShell">
       <header className="hero">
         <div className="brandCluster">
-          <div className="brandMark" aria-hidden="true">
-            <Sparkles size={24} />
+          <div className="brandMark logoMarkWrap" aria-hidden="true">
+            <LogoMark />
           </div>
           <div>
             <h1>AI Image Renamer</h1>
@@ -990,8 +994,8 @@ function SiteNav({ homePath, navigate, onLocaleChange, setTheme, t, theme, uiLoc
     <header className={isNavScrolled ? "landingNav isScrolled" : "landingNav"}>
       <div className="landingNavInner">
         <button className="landingBrand" type="button" onClick={() => navigate(homePath)}>
-          <span className="brandMark" aria-hidden="true">
-            <Sparkles size={22} />
+          <span className="brandMark logoMarkWrap" aria-hidden="true">
+            <LogoMark />
           </span>
           <span>AI Image Renamer</span>
         </button>

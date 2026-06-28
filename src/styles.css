@@ -863,6 +863,18 @@ button {
   width: 42px;
 }
 
+.logoMarkWrap {
+  background: transparent;
+}
+
+.brandLogo {
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
 h1 {
   font-size: 24px;
   letter-spacing: 0;

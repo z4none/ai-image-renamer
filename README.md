@@ -22,6 +22,7 @@ Use it when camera-generated names like `IMG_2048.jpeg` or `DSC_1182.png` need t
 - Review, edit, skip, or apply generated names.
 - Rename files in place through the File System Access API.
 - Switch between light and dark themes.
+- Install the app as a PWA with a manifest, app icons, and service worker caching.
 - Serve SEO landing pages for supported locales.
 
 ## Screenshots
@@ -94,7 +95,7 @@ Create a production build:
 pnpm build
 ```
 
-The build runs Vite and then `scripts/prerender.mjs`. The prerender step emits static landing and legal pages for:
+The build runs Vite, `scripts/prerender.mjs`, and `scripts/generate-sw.mjs`. The prerender step emits static landing and legal pages for:
 
 - `/`
 - `/de/`
@@ -105,6 +106,8 @@ The build runs Vite and then `scripts/prerender.mjs`. The prerender step emits s
 - `/zh-TW/`
 - matching `/terms/` and `/privacy/` pages
 - `/app/` for the interactive app
+
+The final service worker is generated after prerendering so the PWA precache includes the app route, localized landing pages, legal pages, screenshots, icons, and hashed Vite assets.
 
 Set the public site URL before building so canonical and Open Graph URLs use the deployment domain:
 
@@ -167,3 +170,4 @@ The production HTML is generated in two phases:
 - Do not commit `dist/`, `node_modules/`, local logs, or environment files.
 - Add new UI text through `src/data/constants.js` so localized pages and the app stay aligned.
 - Run `pnpm build` after changing prerendering, routing, or asset handling.
+- Keep PWA icons in `public/` and update `vite.config.js` when adding new required sizes.
