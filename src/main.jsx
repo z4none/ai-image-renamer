@@ -503,7 +503,7 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
           await renameFile(row, item.oldName);
           updateRow(rowIndex, {
             name: item.oldName,
-            newName: item.oldName,
+            newName: item.newName,
             relativePath: item.oldRelativePath,
             skipped: false,
             undoBatchItem: null,
@@ -939,7 +939,7 @@ function hydrateRowsFromLastBatch(rows, batch) {
     return {
       ...row,
       id: batchItem.id,
-      newName: batchItem.oldName,
+      newName: batchItem.newName,
       skipped: false,
       state: "Renamed",
       undoBatchItem: batchItem,
