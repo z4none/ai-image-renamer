@@ -8,6 +8,9 @@ yarn.lock
 dist/
 dev-dist/
 
+# Local planning docs
+docs/_*/
+
 # Local logs
 *.log
 npm-debug.log*

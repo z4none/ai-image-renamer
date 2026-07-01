@@ -6,6 +6,7 @@ import {
   Bot,
   CircleAlert,
   CheckCircle2,
+  Download,
   Folder,
   Github,
   Globe2,
@@ -13,6 +14,7 @@ import {
   Languages,
   Loader2,
   Moon,
+  RotateCcw,
   Save,
   ShieldCheck,
   Sparkles,
@@ -30,6 +32,15 @@ const PROMPT_TIMEOUT_MS = 60_000;
 const MAX_PROMPTS_PER_SESSION = 24;
 const CHROME_DOWNLOAD_URL = "https://www.google.com/chrome/";
 const GITHUB_URL = "https://github.com/z4none/ai-image-renamer";
+const LAST_BATCH_KEY = "ai-image-renamer-last-batch";
+const ROW_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "ready", label: "Ready" },
+  { value: "pending", label: "Pending" },
+  { value: "failed", label: "Failed" },
+  { value: "renamed", label: "Renamed" },
+  { value: "skipped", label: "Skipped" },
+];
 
 const log = (...args) => console.log("[ai-image-renamer]", ...args);
 const logError = (...args) => console.error("[ai-image-renamer]", ...args);
@@ -118,8 +129,11 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
   const [conflictStrategy, setConflictStrategy] = useState("append");
   const [includeSubfolders, setIncludeSubfolders] = useState(false);
   const [rows, setRows] = useState([]);
+  const [rowFilter, setRowFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [status, setStatus] = useState("");
   const [progress, setProgressState] = useState({ value: 0, max: 1 });
+  const [lastBatch, setLastBatch] = useState(() => readLastBatch());
   const [support, setSupport] = useState({
     aiAvailability: "unknown",
     browserName: "Unknown",
@@ -148,7 +162,9 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
   const t = useMemo(() => UI_TEXT[uiLocale] || UI_TEXT.en, [uiLocale]);
   const landingPath = uiLocale === "en" ? "/" : `/${uiLocale}`;
   const readyCount = rows.filter(isReady).length;
+  const visibleRows = useMemo(() => filterRows(rows, rowFilter, searchQuery), [rowFilter, rows, searchQuery]);
   const failedCount = rows.filter((row) => String(row.state).startsWith("Failed")).length;
+  const selectedVisibleCount = visibleRows.filter((row) => row.selected !== false).length;
 
   useEffect(() => {
     if (!rows.length && !folderName) {
@@ -236,7 +252,7 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
       return;
     }
 
-    await scanDirectory(nextDirectoryHandle, includeSubfolders);
+    await scanDirectory(nextDirectoryHandle, includeSubfolders || batchNeedsRecursiveScan(lastBatch));
   }
 
   async function scanDirectory(handle, recursive) {
@@ -249,22 +265,32 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
           ...item,
           id: `${item.relativePath}-${discovered.length}`,
           newName: "",
+          selected: true,
+          skipped: false,
           state: "Pending",
           previewUrl: "",
         });
       }
     }
 
-    setRows(discovered);
+    const nextRows = hydrateRowsFromLastBatch(discovered, lastBatch);
+    setRows(nextRows);
     setProgress(discovered.length ? 0 : 1, Math.max(1, discovered.length));
-    setStatus(discovered.length ? `${t.images}: ${discovered.length}` : t.noSupportedImages);
-    log("scanDirectory:done", { count: discovered.length, recursive });
+    const recoveredUndoCount = nextRows.filter((row) => row.undoBatchItem).length;
+    setStatus(
+      recoveredUndoCount
+        ? `${t.images}: ${discovered.length} · Undo ready: ${recoveredUndoCount}`
+        : discovered.length
+          ? `${t.images}: ${discovered.length}`
+          : t.noSupportedImages,
+    );
+    log("scanDirectory:done", { count: discovered.length, recoveredUndoCount, recursive });
   }
 
   async function changeIncludeSubfolders(checked) {
     setIncludeSubfolders(checked);
     if (directoryHandle) {
-      await scanDirectory(directoryHandle, checked);
+      await scanDirectory(directoryHandle, checked || batchNeedsRecursiveScan(lastBatch));
     }
   }
 
@@ -283,6 +309,10 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
           break;
         }
         const row = plannedRows[index];
+        if (row.skipped) {
+          setProgress(index + 1, plannedRows.length);
+          continue;
+        }
         updateRow(index, { state: "Analyzing" });
         setStatus(`${t.analyzing} ${index + 1}/${plannedRows.length}: ${row.relativePath}`);
         log("analyze:image:start", { index: index + 1, total: plannedRows.length, path: row.relativePath });
@@ -328,37 +358,69 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
     cancelRequestedRef.current = false;
     setIsCancelRequested(false);
     setIsApplying(true);
-    setProgress(0, rows.length);
-    log("apply:start", { count: rows.length });
+    const applyableRows = rows.map((row, index) => ({ ...row, index })).filter(isReady);
+    const batch = {
+      id: `batch-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      folderName,
+      items: [],
+      undone: false,
+    };
+    setProgress(0, applyableRows.length || 1);
+    log("apply:start", { count: applyableRows.length });
 
     try {
-      for (let index = 0; index < rows.length; index += 1) {
+      for (let applyIndex = 0; applyIndex < applyableRows.length; applyIndex += 1) {
         if (cancelRequestedRef.current) {
           break;
         }
-        const current = rows[index];
-        if (!isReady(current)) {
-          setProgress(index + 1, rows.length);
-          continue;
-        }
+        const current = applyableRows[applyIndex];
 
-        updateRow(index, { state: "Renaming" });
-        setStatus(`${t.applyRenames} ${index + 1}/${rows.length}: ${current.relativePath}`);
+        updateRow(current.index, { state: "Renaming" });
+        setStatus(`${t.applyRenames} ${applyIndex + 1}/${applyableRows.length}: ${current.relativePath}`);
 
         try {
           validateNewName(current.newName);
           await renameFile(current, current.newName);
-          updateRow(index, { name: current.newName, state: "Renamed" });
+          const nextRelativePath = replacePathBasename(current.relativePath, current.newName);
+          updateRow(current.index, {
+            name: current.newName,
+            relativePath: nextRelativePath,
+            selected: false,
+            state: "Renamed",
+          });
+          batch.items.push({
+            id: current.id,
+            oldName: current.name,
+            newName: current.newName,
+            oldRelativePath: current.relativePath,
+            newRelativePath: nextRelativePath,
+            state: "Renamed",
+          });
           log("apply:file:done", { newName: current.newName });
         } catch (error) {
-          updateRow(index, { state: `Failed: ${error.message || error}` });
+          const message = String(error.message || error);
+          updateRow(current.index, { state: `Failed: ${message}` });
+          batch.items.push({
+            id: current.id,
+            oldName: current.name,
+            newName: current.newName,
+            oldRelativePath: current.relativePath,
+            newRelativePath: replacePathBasename(current.relativePath, current.newName),
+            state: "Failed",
+            error: message,
+          });
           logError("apply:file:failed", { oldName: current.name, error });
         }
 
-        setProgress(index + 1, rows.length);
+        setProgress(applyIndex + 1, applyableRows.length || 1);
         if (cancelRequestedRef.current) {
           break;
         }
+      }
+      if (batch.items.length) {
+        persistLastBatch(batch);
+        setLastBatch(batch);
       }
       setStatus(cancelRequestedRef.current ? t.renameCanceled : t.renameComplete);
     } finally {
@@ -380,6 +442,118 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
 
   function updateRow(index, patch) {
     setRows((currentRows) => currentRows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+  }
+
+  function toggleRowSelected(rowId, selected) {
+    setRows((currentRows) => currentRows.map((row) => (row.id === rowId ? { ...row, selected } : row)));
+  }
+
+  function updateVisibleRows(patchFactory) {
+    const visibleIds = new Set(visibleRows.map((row) => row.id));
+    setRows((currentRows) =>
+      currentRows.map((row) => (visibleIds.has(row.id) ? { ...row, ...patchFactory(row) } : row)),
+    );
+  }
+
+  function selectAllVisible() {
+    updateVisibleRows(() => ({ selected: true }));
+  }
+
+  function clearVisibleSelection() {
+    updateVisibleRows(() => ({ selected: false }));
+  }
+
+  function skipSelectedRows() {
+    setRows((currentRows) =>
+      currentRows.map((row) => (row.selected !== false ? { ...row, selected: false, skipped: true } : row)),
+    );
+  }
+
+  function restoreSelectedRows() {
+    setRows((currentRows) =>
+      currentRows.map((row) => (row.selected !== false ? { ...row, skipped: false } : row)),
+    );
+  }
+
+  function clearSelectedGeneratedNames() {
+    setRows((currentRows) =>
+      currentRows.map((row) =>
+        row.selected !== false && row.state !== "Renamed"
+          ? { ...row, newName: "", state: row.skipped ? row.state : "Pending" }
+          : row,
+      ),
+    );
+  }
+
+  function exportRenamePlan() {
+    if (!rows.length) return;
+    const csv = toCsv([
+      ["relativePath", "currentName", "generatedName", "state", "selected", "skipped"],
+      ...rows.map((row) => [
+        row.relativePath,
+        row.name,
+        row.newName,
+        row.skipped ? "Skipped" : row.state,
+        row.selected !== false ? "true" : "false",
+        row.skipped ? "true" : "false",
+      ]),
+    ]);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ai-image-renamer-plan-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function undoLastBatch() {
+    if (!lastBatch?.items?.length) return;
+    const renamedItems = lastBatch.items.filter((item) => item.state === "Renamed");
+    if (!renamedItems.length) return;
+    const undoTargets = renamedItems
+      .map((item) => ({ item, rowIndex: findUndoRowIndex(rows, item) }))
+      .filter((target) => target.rowIndex >= 0);
+    if (!undoTargets.length) {
+      setStatus(`Open ${lastBatch.folderName || "the original folder"} again, then run Undo Last.`);
+      return;
+    }
+    cancelRequestedRef.current = false;
+    setIsApplying(true);
+    setProgress(0, undoTargets.length);
+
+    try {
+      for (let index = 0; index < undoTargets.length; index += 1) {
+        const { item, rowIndex } = undoTargets[index];
+        const row = rows[rowIndex];
+
+        setStatus(`Undo ${index + 1}/${undoTargets.length}: ${item.newRelativePath}`);
+        updateRow(rowIndex, { state: "Renaming" });
+        try {
+          await renameFile(row, item.oldName);
+          updateRow(rowIndex, {
+            name: item.oldName,
+            newName: item.oldName,
+            relativePath: item.oldRelativePath,
+            selected: false,
+            skipped: false,
+            undoBatchItem: null,
+            state: "Restored",
+          });
+        } catch (error) {
+          updateRow(rowIndex, { state: `Failed: ${error.message || error}` });
+        }
+        setProgress(index + 1, undoTargets.length);
+      }
+
+      const nextBatch = { ...lastBatch, undone: true, undoneAt: new Date().toISOString() };
+      persistLastBatch(nextBatch);
+      setLastBatch(nextBatch);
+      setStatus("Undo complete.");
+    } finally {
+      setIsApplying(false);
+    }
   }
 
   async function getSession(lang) {
@@ -645,6 +819,20 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
           />
           <IconButton
             variant="secondary"
+            icon={<Download size={18} />}
+            label="Export CSV"
+            disabled={!rows.length || isAnalyzing || isApplying}
+            onClick={exportRenamePlan}
+          />
+          <IconButton
+            variant="secondary"
+            icon={<RotateCcw size={18} />}
+            label="Undo Last"
+            disabled={!canAttemptUndo(lastBatch) || isAnalyzing || isApplying}
+            onClick={undoLastBatch}
+          />
+          <IconButton
+            variant="secondary"
             icon={<X size={18} />}
             label={isCancelRequested ? t.canceling : t.cancel}
             disabled={(!isAnalyzing && !isApplying) || isCancelRequested}
@@ -654,6 +842,33 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
       </section>
 
       <section className="workspace">
+        <div className="reviewBar">
+          <label className="searchField">
+            <span>Search</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Current, generated, or path"
+            />
+          </label>
+          <label className="filterField">
+            <span>Status</span>
+            <SelectControl
+              label="Status"
+              value={rowFilter}
+              options={ROW_FILTERS}
+              onChange={setRowFilter}
+            />
+          </label>
+          <div className="reviewActions" aria-label="Review actions">
+            <IconButton variant="secondary" icon={<CheckCircle2 size={18} />} label="Select visible" disabled={!visibleRows.length || isAnalyzing || isApplying} onClick={selectAllVisible} />
+            <IconButton variant="secondary" icon={<X size={18} />} label="Clear visible" disabled={!selectedVisibleCount || isAnalyzing || isApplying} onClick={clearVisibleSelection} />
+            <IconButton variant="secondary" icon={<X size={18} />} label="Skip selected" disabled={!rows.some((row) => row.selected !== false) || isAnalyzing || isApplying} onClick={skipSelectedRows} />
+            <IconButton variant="secondary" icon={<RotateCcw size={18} />} label="Restore selected" disabled={!rows.some((row) => row.selected !== false && row.skipped) || isAnalyzing || isApplying} onClick={restoreSelectedRows} />
+            <IconButton variant="secondary" icon={<RotateCcw size={18} />} label="Clear names" disabled={!rows.some((row) => row.selected !== false && row.newName) || isAnalyzing || isApplying} onClick={clearSelectedGeneratedNames} />
+          </div>
+        </div>
         <div className="statusPanel" aria-live="polite">
           <div className="statusMessage">
             <span>{t.status}</span>
@@ -665,9 +880,15 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
             <Stat label={t.ready} value={readyCount} />
             <Stat label={t.failed} value={failedCount} tone={failedCount ? "danger" : ""} />
           </div>
+          {lastBatch ? (
+            <div className="batchSummary">
+              <span>Last batch</span>
+              <strong>{summarizeBatch(lastBatch)}</strong>
+            </div>
+          ) : null}
           <ProgressBar max={progress.max} value={progress.value} />
         </div>
-        <ImageTable rows={rows} setRows={setRows} t={t} />
+        <ImageTable rows={visibleRows} setRows={setRows} t={t} onToggleSelected={toggleRowSelected} />
       </section>
     </main>
   );
@@ -707,6 +928,119 @@ function isLegalPath(pathname) {
 function legalPathFor(locale, type) {
   const prefix = locale && locale !== "en" ? `/${locale}` : "";
   return `${prefix}/${type}`;
+}
+
+function readLastBatch() {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_BATCH_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function persistLastBatch(batch) {
+  localStorage.setItem(LAST_BATCH_KEY, JSON.stringify(batch));
+}
+
+function filterRows(rows, filter, query) {
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  return rows
+    .map((row, originalIndex) => ({ ...row, originalIndex }))
+    .filter((row) => rowMatchesFilter(row, filter))
+    .filter((row) => {
+      if (!normalizedQuery) return true;
+      return [row.name, row.newName, row.relativePath]
+        .some((value) => String(value || "").toLocaleLowerCase().includes(normalizedQuery));
+    });
+}
+
+function hydrateRowsFromLastBatch(rows, batch) {
+  if (!canAttemptUndo(batch)) return rows;
+  const renamedItemsByNewPath = new Map(
+    batch.items
+      .filter((item) => item.state === "Renamed")
+      .map((item) => [normalizeRelativePath(item.newRelativePath), item]),
+  );
+
+  return rows.map((row) => {
+    const batchItem = renamedItemsByNewPath.get(normalizeRelativePath(row.relativePath));
+    if (!batchItem) return row;
+    return {
+      ...row,
+      id: batchItem.id,
+      newName: batchItem.oldName,
+      selected: false,
+      skipped: false,
+      state: "Renamed",
+      undoBatchItem: batchItem,
+    };
+  });
+}
+
+function findUndoRowIndex(rows, batchItem) {
+  const normalizedNewPath = normalizeRelativePath(batchItem.newRelativePath);
+  return rows.findIndex(
+    (row) =>
+      row.id === batchItem.id ||
+      normalizeRelativePath(row.relativePath) === normalizedNewPath ||
+      normalizeRelativePath(row.undoBatchItem?.newRelativePath) === normalizedNewPath,
+  );
+}
+
+function canAttemptUndo(batch) {
+  return Boolean(batch?.items?.some((item) => item.state === "Renamed") && !batch.undone);
+}
+
+function batchNeedsRecursiveScan(batch) {
+  return Boolean(
+    batch?.items?.some(
+      (item) =>
+        item.state === "Renamed" &&
+        (String(item.oldRelativePath || "").includes("/") || String(item.newRelativePath || "").includes("/")),
+    ),
+  );
+}
+
+function normalizeRelativePath(value) {
+  return String(value || "").replace(/\\/gu, "/").replace(/^\/+/u, "").toLocaleLowerCase();
+}
+
+function rowMatchesFilter(row, filter) {
+  if (filter === "all") return true;
+  if (filter === "skipped") return Boolean(row.skipped);
+  if (row.skipped) return false;
+  if (filter === "ready") return row.state === "Ready";
+  if (filter === "pending") return row.state === "Pending" || row.state === "Analyzing";
+  if (filter === "failed") return String(row.state).startsWith("Failed");
+  if (filter === "renamed") return row.state === "Renamed" || row.state === "Restored";
+  return true;
+}
+
+function toCsv(rows) {
+  return rows
+    .map((row) =>
+      row
+        .map((value) => {
+          const text = String(value ?? "");
+          return /[",\r\n]/u.test(text) ? `"${text.replace(/"/gu, '""')}"` : text;
+        })
+        .join(","),
+    )
+    .join("\r\n");
+}
+
+function replacePathBasename(relativePath, nextName) {
+  const normalizedPath = String(relativePath || "");
+  const slashIndex = normalizedPath.lastIndexOf("/");
+  return slashIndex >= 0 ? `${normalizedPath.slice(0, slashIndex + 1)}${nextName}` : nextName;
+}
+
+function summarizeBatch(batch) {
+  const renamed = batch.items?.filter((item) => item.state === "Renamed").length || 0;
+  const failed = batch.items?.filter((item) => item.state === "Failed").length || 0;
+  const suffix = batch.undone ? " · undone" : "";
+  const folder = batch.folderName ? ` · ${batch.folderName}` : "";
+  return `${renamed} renamed, ${failed} failed${suffix}${folder}`;
 }
 
 function translateStaticStatus(currentStatus, t) {

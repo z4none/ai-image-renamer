@@ -1139,7 +1139,8 @@ p {
   box-shadow: none;
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="search"] {
   background: var(--surface-solid);
   border: 1px solid var(--border-strong);
   border-radius: 8px;
@@ -1256,9 +1257,44 @@ input[type="text"] {
 
 .workspace {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
+}
+
+.reviewBar {
+  align-items: end;
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 190px) minmax(0, auto);
+  padding: 10px 12px;
+}
+
+.searchField,
+.filterField {
+  color: var(--subtle);
+  display: grid;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 5px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.searchField input {
+  min-height: 36px;
+}
+
+.reviewActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.reviewActions .button {
+  min-height: 34px;
 }
 
 .statusPanel {
@@ -1283,6 +1319,11 @@ input[type="text"] {
 .statusPanel strong {
   display: block;
   overflow-wrap: anywhere;
+}
+
+.batchSummary {
+  border-left: 1px solid var(--border);
+  padding-left: 12px;
 }
 
 .progressRoot {
@@ -1336,6 +1377,17 @@ th {
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0;
+}
+
+.selectColumn {
+  text-align: center;
+  width: 58px;
+}
+
+.selectColumn input {
+  accent-color: var(--primary);
+  height: 17px;
+  width: 17px;
 }
 
 tbody tr:hover {
@@ -1554,6 +1606,22 @@ tbody tr:hover {
   .statusPanel {
     grid-template-columns: 1fr;
   }
+
+  .reviewBar {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .reviewActions {
+    justify-content: flex-start;
+  }
+
+  .batchSummary {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding-left: 0;
+    padding-top: 8px;
+  }
 }
 
 @media (max-width: 620px) {
@@ -1637,6 +1705,10 @@ tbody tr:hover {
   }
 
   .heroActions {
+    display: grid;
+  }
+
+  .reviewActions {
     display: grid;
   }
 

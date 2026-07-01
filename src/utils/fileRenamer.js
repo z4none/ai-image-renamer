@@ -154,6 +154,8 @@ function avoidReserved(value) {
 }
 
 export function formatState(state, t) {
+  if (state === "Skipped") return t.stateSkipped || "Skipped";
+  if (state === "Restored") return t.stateRestored || "Restored";
   if (state === "Pending") return t.statePending;
   if (state === "Ready") return t.stateReady;
   if (state === "Renamed") return t.stateRenamed;
@@ -169,7 +171,7 @@ export function formatState(state, t) {
 }
 
 export function isReady(row) {
-  return row.state === "Ready" && row.newName && row.name !== row.newName;
+  return row.state === "Ready" && row.selected !== false && !row.skipped && row.newName && row.name !== row.newName;
 }
 
 export function validateNewName(name) {
