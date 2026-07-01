@@ -6,7 +6,6 @@ import {
   Bot,
   CircleAlert,
   CheckCircle2,
-  Download,
   Folder,
   Github,
   Globe2,
@@ -452,28 +451,6 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
     setRows((currentRows) => currentRows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
   }
 
-  function exportRenamePlan() {
-    if (!rows.length) return;
-    const csv = toCsv([
-      ["relativePath", "currentName", "generatedName", "state", "skipped"],
-      ...rows.map((row) => [
-        row.relativePath,
-        row.name,
-        row.newName,
-        row.skipped ? "Skipped" : row.state,
-        row.skipped ? "true" : "false",
-      ]),
-    ]);
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `ai-image-renamer-plan-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  }
-
   async function undoLastBatch() {
     if (!lastBatch?.items?.length) return;
     const renamedItems = lastBatch.items.filter((item) => item.state === "Renamed");
@@ -787,13 +764,6 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
           />
           <IconButton
             variant="secondary"
-            icon={<Download size={18} />}
-            label="Export CSV"
-            disabled={!rows.length || isAnalyzing || isApplying}
-            onClick={exportRenamePlan}
-          />
-          <IconButton
-            variant="secondary"
             icon={<RotateCcw size={18} />}
             label="Undo Last"
             disabled={!canAttemptUndo(lastBatch) || isAnalyzing || isApplying}
@@ -984,19 +954,6 @@ function rowMatchesFilter(row, filter) {
   if (filter === "failed") return String(row.state).startsWith("Failed");
   if (filter === "renamed") return row.state === "Renamed" || row.state === "Restored";
   return true;
-}
-
-function toCsv(rows) {
-  return rows
-    .map((row) =>
-      row
-        .map((value) => {
-          const text = String(value ?? "");
-          return /[",\r\n]/u.test(text) ? `"${text.replace(/"/gu, '""')}"` : text;
-        })
-        .join(","),
-    )
-    .join("\r\n");
 }
 
 function replacePathBasename(relativePath, nextName) {
