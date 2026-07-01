@@ -171,7 +171,7 @@ export function formatState(state, t) {
 }
 
 export function isReady(row) {
-  return row.state === "Ready" && !row.skipped && row.newName && row.name !== row.newName;
+  return (row.state === "Ready" || row.state === "Restored") && !row.skipped && row.newName && row.name !== row.newName;
 }
 
 export function validateNewName(name) {
