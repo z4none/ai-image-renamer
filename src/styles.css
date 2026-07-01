@@ -1267,7 +1267,7 @@ input[type="search"] {
   border-bottom: 1px solid var(--border);
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 1fr) minmax(150px, 190px) minmax(0, auto);
+  grid-template-columns: minmax(220px, 1fr) minmax(150px, 190px);
   padding: 10px 12px;
 }
 
@@ -1284,17 +1284,6 @@ input[type="search"] {
 
 .searchField input {
   min-height: 36px;
-}
-
-.reviewActions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.reviewActions .button {
-  min-height: 34px;
 }
 
 .statusPanel {
@@ -1319,6 +1308,57 @@ input[type="search"] {
 .statusPanel strong {
   display: block;
   overflow-wrap: anywhere;
+}
+
+.statusTip {
+  align-items: flex-start;
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface-solid));
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border));
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  gap: 9px;
+  max-width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.statusTip:hover {
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface-solid));
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border-strong));
+}
+
+.statusTip:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.statusTip svg {
+  color: var(--primary);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.statusPanel .statusTipText {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  min-width: 0;
+  text-transform: none;
+}
+
+.statusPanel .statusTipText strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.statusPanel .statusTipText small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
 .batchSummary {
@@ -1377,17 +1417,6 @@ th {
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0;
-}
-
-.selectColumn {
-  text-align: center;
-  width: 58px;
-}
-
-.selectColumn input {
-  accent-color: var(--primary);
-  height: 17px;
-  width: 17px;
 }
 
 tbody tr:hover {
@@ -1612,10 +1641,6 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
-  .reviewActions {
-    justify-content: flex-start;
-  }
-
   .batchSummary {
     border-left: 0;
     border-top: 1px solid var(--border);
@@ -1705,10 +1730,6 @@ tbody tr:hover {
   }
 
   .heroActions {
-    display: grid;
-  }
-
-  .reviewActions {
     display: grid;
   }
 

@@ -109,7 +109,7 @@ export function Stat({ label, value, tone }) {
   );
 }
 
-export function ImageTable({ rows, setRows, t, onToggleSelected }) {
+export function ImageTable({ rows, setRows, t }) {
   if (!rows.length) {
     return (
       <div className="emptyState">
@@ -131,7 +131,6 @@ export function ImageTable({ rows, setRows, t, onToggleSelected }) {
       <table>
         <thead>
           <tr>
-            <th className="selectColumn">Use</th>
             <th>{t.preview}</th>
             <th>{t.currentName}</th>
             <th>{t.generatedName}</th>
@@ -145,7 +144,6 @@ export function ImageTable({ rows, setRows, t, onToggleSelected }) {
               row={row}
               index={row.originalIndex ?? index}
               onNameChange={updateName}
-              onToggleSelected={onToggleSelected}
               t={t}
             />
           ))}
@@ -155,7 +153,7 @@ export function ImageTable({ rows, setRows, t, onToggleSelected }) {
   );
 }
 
-function ImageRow({ row, index, onNameChange, onToggleSelected, t }) {
+function ImageRow({ row, index, onNameChange, t }) {
   const [previewUrl, setPreviewUrl] = useState("");
   const extension = extensionOf(row.newName || row.name);
 
@@ -182,14 +180,6 @@ function ImageRow({ row, index, onNameChange, onToggleSelected, t }) {
 
   return (
     <tr>
-      <td className="selectColumn">
-        <input
-          aria-label={`Select ${row.name}`}
-          checked={row.selected !== false}
-          type="checkbox"
-          onChange={(event) => onToggleSelected(row.id, event.target.checked)}
-        />
-      </td>
       <td>
         <div className="thumb">{previewUrl ? <img src={previewUrl} alt={row.name} /> : <FileImage size={22} />}</div>
       </td>

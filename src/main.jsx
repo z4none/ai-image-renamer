@@ -132,6 +132,7 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
   const [rowFilter, setRowFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [status, setStatus] = useState("");
+  const [undoRecoveryTip, setUndoRecoveryTip] = useState(null);
   const [progress, setProgressState] = useState({ value: 0, max: 1 });
   const [lastBatch, setLastBatch] = useState(() => readLastBatch());
   const [support, setSupport] = useState({
@@ -164,7 +165,6 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
   const readyCount = rows.filter(isReady).length;
   const visibleRows = useMemo(() => filterRows(rows, rowFilter, searchQuery), [rowFilter, rows, searchQuery]);
   const failedCount = rows.filter((row) => String(row.state).startsWith("Failed")).length;
-  const selectedVisibleCount = visibleRows.filter((row) => row.selected !== false).length;
 
   useEffect(() => {
     if (!rows.length && !folderName) {
@@ -243,7 +243,17 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
 
   async function pickFolder() {
     log("pickFolder:start");
-    const nextDirectoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    let nextDirectoryHandle = null;
+    try {
+      nextDirectoryHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        log("pickFolder:canceled");
+        return;
+      }
+      throw error;
+    }
+    setUndoRecoveryTip(null);
     setFolderName(nextDirectoryHandle.name);
     setDirectoryHandle(nextDirectoryHandle);
     const permission = await ensureReadWritePermission(nextDirectoryHandle);
@@ -265,7 +275,6 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
           ...item,
           id: `${item.relativePath}-${discovered.length}`,
           newName: "",
-          selected: true,
           skipped: false,
           state: "Pending",
           previewUrl: "",
@@ -386,7 +395,6 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
           updateRow(current.index, {
             name: current.newName,
             relativePath: nextRelativePath,
-            selected: false,
             state: "Renamed",
           });
           batch.items.push({
@@ -444,57 +452,15 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
     setRows((currentRows) => currentRows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
   }
 
-  function toggleRowSelected(rowId, selected) {
-    setRows((currentRows) => currentRows.map((row) => (row.id === rowId ? { ...row, selected } : row)));
-  }
-
-  function updateVisibleRows(patchFactory) {
-    const visibleIds = new Set(visibleRows.map((row) => row.id));
-    setRows((currentRows) =>
-      currentRows.map((row) => (visibleIds.has(row.id) ? { ...row, ...patchFactory(row) } : row)),
-    );
-  }
-
-  function selectAllVisible() {
-    updateVisibleRows(() => ({ selected: true }));
-  }
-
-  function clearVisibleSelection() {
-    updateVisibleRows(() => ({ selected: false }));
-  }
-
-  function skipSelectedRows() {
-    setRows((currentRows) =>
-      currentRows.map((row) => (row.selected !== false ? { ...row, selected: false, skipped: true } : row)),
-    );
-  }
-
-  function restoreSelectedRows() {
-    setRows((currentRows) =>
-      currentRows.map((row) => (row.selected !== false ? { ...row, skipped: false } : row)),
-    );
-  }
-
-  function clearSelectedGeneratedNames() {
-    setRows((currentRows) =>
-      currentRows.map((row) =>
-        row.selected !== false && row.state !== "Renamed"
-          ? { ...row, newName: "", state: row.skipped ? row.state : "Pending" }
-          : row,
-      ),
-    );
-  }
-
   function exportRenamePlan() {
     if (!rows.length) return;
     const csv = toCsv([
-      ["relativePath", "currentName", "generatedName", "state", "selected", "skipped"],
+      ["relativePath", "currentName", "generatedName", "state", "skipped"],
       ...rows.map((row) => [
         row.relativePath,
         row.name,
         row.newName,
         row.skipped ? "Skipped" : row.state,
-        row.selected !== false ? "true" : "false",
         row.skipped ? "true" : "false",
       ]),
     ]);
@@ -516,7 +482,10 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
       .map((item) => ({ item, rowIndex: findUndoRowIndex(rows, item) }))
       .filter((target) => target.rowIndex >= 0);
     if (!undoTargets.length) {
-      setStatus(`Open ${lastBatch.folderName || "the original folder"} again, then run Undo Last.`);
+      setUndoRecoveryTip({
+        title: `Open ${lastBatch.folderName || "the original folder"} again`,
+        body: "Click this tip to choose the folder and reconnect Undo Last.",
+      });
       return;
     }
     cancelRequestedRef.current = false;
@@ -536,7 +505,6 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
             name: item.oldName,
             newName: item.oldName,
             relativePath: item.oldRelativePath,
-            selected: false,
             skipped: false,
             undoBatchItem: null,
             state: "Restored",
@@ -861,18 +829,21 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
               onChange={setRowFilter}
             />
           </label>
-          <div className="reviewActions" aria-label="Review actions">
-            <IconButton variant="secondary" icon={<CheckCircle2 size={18} />} label="Select visible" disabled={!visibleRows.length || isAnalyzing || isApplying} onClick={selectAllVisible} />
-            <IconButton variant="secondary" icon={<X size={18} />} label="Clear visible" disabled={!selectedVisibleCount || isAnalyzing || isApplying} onClick={clearVisibleSelection} />
-            <IconButton variant="secondary" icon={<X size={18} />} label="Skip selected" disabled={!rows.some((row) => row.selected !== false) || isAnalyzing || isApplying} onClick={skipSelectedRows} />
-            <IconButton variant="secondary" icon={<RotateCcw size={18} />} label="Restore selected" disabled={!rows.some((row) => row.selected !== false && row.skipped) || isAnalyzing || isApplying} onClick={restoreSelectedRows} />
-            <IconButton variant="secondary" icon={<RotateCcw size={18} />} label="Clear names" disabled={!rows.some((row) => row.selected !== false && row.newName) || isAnalyzing || isApplying} onClick={clearSelectedGeneratedNames} />
-          </div>
         </div>
         <div className="statusPanel" aria-live="polite">
           <div className="statusMessage">
             <span>{t.status}</span>
-            <strong>{status}</strong>
+            {undoRecoveryTip ? (
+              <button className="statusTip" type="button" onClick={pickFolder}>
+                <CircleAlert size={17} />
+                <span className="statusTipText">
+                  <strong>{undoRecoveryTip.title}</strong>
+                  <small>{undoRecoveryTip.body}</small>
+                </span>
+              </button>
+            ) : (
+              <strong>{status}</strong>
+            )}
           </div>
           <div className="fileStats" aria-label={t.status}>
             {folderName ? <Stat label={t.folder} value={folderName} /> : null}
@@ -888,7 +859,7 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
           ) : null}
           <ProgressBar max={progress.max} value={progress.value} />
         </div>
-        <ImageTable rows={visibleRows} setRows={setRows} t={t} onToggleSelected={toggleRowSelected} />
+        <ImageTable rows={visibleRows} setRows={setRows} t={t} />
       </section>
     </main>
   );
@@ -969,7 +940,6 @@ function hydrateRowsFromLastBatch(rows, batch) {
       ...row,
       id: batchItem.id,
       newName: batchItem.oldName,
-      selected: false,
       skipped: false,
       state: "Renamed",
       undoBatchItem: batchItem,
