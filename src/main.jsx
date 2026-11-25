@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import "./styles.css";
 import { CONFLICT_STRATEGIES, FILENAME_FORMATS, LANGUAGES, LEGAL_TEXT, NAME_LENGTHS, UI_LOCALES, UI_TEXT } from "./data/constants.js";
-import { describeImage, ensureReadWritePermission, isImageName, isReady, isRecoverablePromptError, renameFile, uniqueName, validateNewName, withTimeout } from "./utils/fileRenamer.js";
+import { canRenameRow, describeImage, ensureReadWritePermission, isImageName, isReady, isRecoverablePromptError, renameFile, uniqueName, validateNewName, withTimeout } from "./utils/fileRenamer.js";
 import { IconButton, ImageTable, ProgressBar, SelectControl, Stat } from "./components/ui.jsx";
 
 const PROMPT_TIMEOUT_MS = 60_000;
@@ -53,6 +53,8 @@ const STATUS_TEXT_KEYS = [
   "analysisCanceled",
   "renameComplete",
   "renameCanceled",
+  "rowAnalyzed",
+  "rowRenamed",
   "downloadingModel",
   "reinitializingModel",
 ];
@@ -451,6 +453,108 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
     setRows((currentRows) => currentRows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
   }
 
+  async function analyzeRow(index) {
+    const row = rows[index];
+    if (!row || isAnalyzing || isApplying || !support.hasImagePrompt) return;
+    cancelRequestedRef.current = false;
+    setIsCancelRequested(false);
+    setIsAnalyzing(true);
+    setProgress(0, 1);
+    updateRow(index, { skipped: false, state: "Analyzing" });
+    setStatus(`${t.analyzing}: ${row.relativePath}`);
+    log("analyze:row:start", { path: row.relativePath });
+
+    try {
+      const file = await row.handle.getFile();
+      const description = await describeImageWithRetry(file, selectedLanguage, nameLength);
+      if (cancelRequestedRef.current) {
+        updateRow(index, { state: "Canceled" });
+        setStatus(t.analysisCanceled);
+        return;
+      }
+
+      const newName = uniqueName(row, description, rows, index, {
+        language,
+        format: filenameFormat,
+        conflictStrategy,
+        reserveAllNewNames: true,
+      });
+      if (!newName) {
+        updateRow(index, { newName: "", state: "Skipped: name conflict" });
+        setStatus(t.analysisComplete);
+        log("analyze:row:skipped-conflict", { path: row.relativePath, description });
+        return;
+      }
+
+      updateRow(index, { newName, state: newName === row.name ? "Keep" : "Ready" });
+      setStatus(t.rowAnalyzed);
+      log("analyze:row:ready", { path: row.relativePath, description, newName });
+    } catch (error) {
+      const state = cancelRequestedRef.current ? "Canceled" : `Failed: ${error.message || error}`;
+      updateRow(index, { state });
+      setStatus(cancelRequestedRef.current ? t.analysisCanceled : `${t.failed}: ${row.relativePath}`);
+      logError("analyze:row:failed", { path: row.relativePath, error });
+    } finally {
+      setIsAnalyzing(false);
+      setIsCancelRequested(false);
+      cancelRequestedRef.current = false;
+      setProgress(1, 1);
+    }
+  }
+
+  async function renameRow(index) {
+    const current = rows[index];
+    if (!current || isAnalyzing || isApplying || !canRenameRow(current)) return;
+    cancelRequestedRef.current = false;
+    setIsCancelRequested(false);
+    setIsApplying(true);
+    setProgress(0, 1);
+    updateRow(index, { state: "Renaming" });
+    setStatus(`${t.applyRenames}: ${current.relativePath}`);
+    log("rename:row:start", { path: current.relativePath, newName: current.newName });
+
+    const batch = {
+      id: `batch-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      folderName,
+      items: [],
+      undone: false,
+    };
+
+    try {
+      validateNewName(current.newName);
+      await renameFile(current, current.newName);
+      const nextRelativePath = replacePathBasename(current.relativePath, current.newName);
+      updateRow(index, {
+        name: current.newName,
+        relativePath: nextRelativePath,
+        state: "Renamed",
+      });
+      batch.items.push({
+        id: current.id,
+        oldName: current.name,
+        newName: current.newName,
+        oldRelativePath: current.relativePath,
+        newRelativePath: nextRelativePath,
+        state: "Renamed",
+      });
+      persistLastBatch(batch);
+      setLastBatch(batch);
+      setStatus(t.rowRenamed);
+      log("rename:row:done", { newName: current.newName });
+    } catch (error) {
+      const message = String(error.message || error);
+      updateRow(index, { state: `Failed: ${message}` });
+      setStatus(`${t.failed}: ${current.relativePath}`);
+      logError("rename:row:failed", { oldName: current.name, error });
+    } finally {
+      setIsApplying(false);
+      setIsCancelRequested(false);
+      cancelRequestedRef.current = false;
+      setProgress(1, 1);
+    }
+  }
+
   async function undoLastBatch() {
     if (!lastBatch?.items?.length) return;
     const renamedItems = lastBatch.items.filter((item) => item.state === "Renamed");
@@ -588,7 +692,7 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
         return description;
       } catch (error) {
         await resetSession();
-        if (attempt >= maxAttempts || !isRecoverablePromptError(error)) {
+        if (cancelRequestedRef.current || attempt >= maxAttempts || !isRecoverablePromptError(error)) {
           throw error;
         }
         log("prompt:retrying-with-new-session", { attempt: attempt + 1 });
@@ -829,7 +933,14 @@ function RenamerApp({ navigate, setTheme, setUiLocale, theme, uiLocale }) {
           ) : null}
           <ProgressBar max={progress.max} value={progress.value} />
         </div>
-        <ImageTable rows={visibleRows} setRows={setRows} t={t} />
+        <ImageTable
+          busy={isAnalyzing || isApplying}
+          onAnalyzeRow={(index) => void analyzeRow(index)}
+          onRenameRow={(index) => void renameRow(index)}
+          rows={visibleRows}
+          setRows={setRows}
+          t={t}
+        />
       </section>
     </main>
   );

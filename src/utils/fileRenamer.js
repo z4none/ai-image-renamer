@@ -58,8 +58,7 @@ export function uniqueName(row, description, rows, rowIndex, options) {
     ...rows
       .filter((_, index) => index !== rowIndex)
       .map((item) => item.name.toLocaleLowerCase()),
-    ...rows
-      .slice(0, rowIndex)
+    ...(options.reserveAllNewNames ? rows.filter((_, index) => index !== rowIndex) : rows.slice(0, rowIndex))
       .map((item) => item.newName.toLocaleLowerCase())
       .filter(Boolean),
   ]);
@@ -172,6 +171,17 @@ export function formatState(state, t) {
 
 export function isReady(row) {
   return (row.state === "Ready" || row.state === "Restored") && !row.skipped && row.newName && row.name !== row.newName;
+}
+
+export function canRenameRow(row) {
+  if (!row || row.skipped || !row.newName || row.newName === row.name) return false;
+  if (row.state === "Renamed" || row.state === "Analyzing" || row.state === "Renaming") return false;
+  try {
+    validateNewName(row.newName);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function validateNewName(name) {

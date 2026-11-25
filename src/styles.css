@@ -1535,6 +1535,65 @@ tbody tr:hover {
   color: var(--danger);
 }
 
+.rowActions {
+  position: relative;
+}
+
+.rowMenuButton {
+  align-items: center;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.rowMenuButton:hover,
+.rowMenuButton[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  background: var(--surface-solid);
+}
+
+.rowMenuButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.rowMenu {
+  background: var(--surface-solid);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 14px 32px rgba(16, 24, 40, 0.16);
+  display: grid;
+  padding: 4px;
+  position: fixed;
+  z-index: 40;
+}
+
+.rowMenuItem {
+  background: transparent;
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+  min-height: 36px;
+  padding: 8px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.rowMenuItem:hover:not(:disabled) {
+  background: var(--surface-raised);
+}
+
+.rowMenuItem:disabled {
+  color: var(--subtle);
+  cursor: not-allowed;
+}
+
 .emptyState {
   align-items: center;
   color: var(--muted);

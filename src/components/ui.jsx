@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { CheckCircle2, CircleAlert, FileImage, RotateCcw } from "lucide-react";
-import { extensionOf, formatState } from "../utils/fileRenamer.js";
+import { CheckCircle2, CircleAlert, FileImage, MoreHorizontal, RotateCcw } from "lucide-react";
+import { canRenameRow, extensionOf, formatState } from "../utils/fileRenamer.js";
 
 const logError = (...args) => console.error("[ai-image-renamer]", ...args);
 
@@ -109,7 +109,7 @@ export function Stat({ label, value, tone }) {
   );
 }
 
-export function ImageTable({ rows, setRows, t }) {
+export function ImageTable({ busy = false, onAnalyzeRow, onRenameRow, rows, setRows, t }) {
   if (!rows.length) {
     return (
       <div className="emptyState">
@@ -135,15 +135,19 @@ export function ImageTable({ rows, setRows, t }) {
             <th>{t.currentName}</th>
             <th>{t.generatedName}</th>
             <th>{t.status}</th>
+            <th>{t.rowActions}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, index) => (
             <ImageRow
               key={row.id}
+              busy={busy}
               row={row}
               index={row.originalIndex ?? index}
+              onAnalyzeRow={onAnalyzeRow}
               onNameChange={updateName}
+              onRenameRow={onRenameRow}
               t={t}
             />
           ))}
@@ -153,7 +157,7 @@ export function ImageTable({ rows, setRows, t }) {
   );
 }
 
-function ImageRow({ row, index, onNameChange, t }) {
+function ImageRow({ busy, index, onAnalyzeRow, onNameChange, onRenameRow, row, t }) {
   const [previewUrl, setPreviewUrl] = useState("");
   const extension = extensionOf(row.newName || row.name);
 
@@ -207,7 +211,99 @@ function ImageRow({ row, index, onNameChange, t }) {
           {stateLabel}
         </span>
       </td>
+      <td>
+        <RowActions
+          analyzeLabel={t.analyzeRow}
+          busy={busy}
+          menuLabel={t.rowMenuLabel}
+          onAnalyze={() => onAnalyzeRow(index)}
+          onRename={() => onRenameRow(index)}
+          renameDisabled={!canRenameRow(row)}
+          renameLabel={t.renameRow}
+        />
+      </td>
     </tr>
+  );
+}
+
+function RowActions({ analyzeLabel, busy, menuLabel, onAnalyze, onRename, renameDisabled, renameLabel }) {
+  const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState(null);
+  const rootRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handlePointerDown(event) {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+
+    function closeOnScroll() {
+      setOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", closeOnScroll, true);
+    window.addEventListener("resize", closeOnScroll);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", closeOnScroll, true);
+      window.removeEventListener("resize", closeOnScroll);
+    };
+  }, [open]);
+
+  function toggleMenu(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const width = 220;
+    const height = 92;
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top = spaceBelow < height + 12 ? Math.max(8, rect.top - height - 6) : rect.bottom + 6;
+    setMenuStyle({ left, top, width });
+    setOpen((current) => !current);
+  }
+
+  function choose(action) {
+    setOpen(false);
+    action();
+  }
+
+  return (
+    <div className="rowActions" ref={rootRef}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={menuLabel}
+        className="rowMenuButton"
+        disabled={busy}
+        type="button"
+        onClick={toggleMenu}
+      >
+        <MoreHorizontal size={18} />
+      </button>
+      {open ? (
+        <div className="rowMenu" role="menu" style={menuStyle}>
+          <button className="rowMenuItem" role="menuitem" type="button" onClick={() => choose(onAnalyze)}>
+            {analyzeLabel}
+          </button>
+          <button
+            className="rowMenuItem"
+            disabled={renameDisabled}
+            role="menuitem"
+            type="button"
+            onClick={() => choose(onRename)}
+          >
+            {renameLabel}
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
